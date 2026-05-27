@@ -283,12 +283,50 @@ def cmd_run_production(args):
     }
 
 
+def cmd_get_photo_poses(args):
+    """Extract photo positions after AT completion."""
+    project_path = args.get("project_path")
+    if not project_path:
+        return {"ok": False, "error": "Missing project_path"}
+
+    project = ccmasterkernel.Project()
+    err = project.readFromFile(project_path)
+    if not err.isNone():
+        return {"ok": False, "error": f"Failed to load project: {err.message}"}
+
+    poses = []
+    for bi in range(project.getNumBlocks()):
+        block = project.getBlock(bi)
+        pgs = block.getPhotogroups()
+        for gi in range(pgs.getNumPhotogroups()):
+            pg = pgs.getPhotogroup(gi)
+            photos = pg.getPhotoArray()
+            for pi in range(len(photos)):
+                photo = photos[pi]
+                center = photo.pose.center
+                if center is None:
+                    continue
+                poses.append({
+                    "path": photo.imageFilePath,
+                    "x": center.x,
+                    "y": center.y,
+                    "z": center.z,
+                })
+
+    return {
+        "ok": True,
+        "count": len(poses),
+        "poses": poses,
+    }
+
+
 COMMANDS = {
     "status": cmd_status,
     "create_project": cmd_create_project,
     "run_at": cmd_run_at,
     "run_reconstruct": cmd_run_reconstruct,
     "run_production": cmd_run_production,
+    "get_photo_poses": cmd_get_photo_poses,
 }
 
 

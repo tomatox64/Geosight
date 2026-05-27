@@ -52,6 +52,11 @@ class _ReconWorker(QThread):
                 return
             self.progress.emit("空三完成")
 
+            self.progress.emit("提取照片位姿...")
+            poses_result = engine_bridge.get_photo_poses(Path(project_path))
+            photo_poses = poses_result.get("poses", [])
+            self.progress.emit(f"获取到 {len(photo_poses)} 个照片位姿")
+
             self.progress.emit("三维重建中...")
             recon_result = engine_bridge.run_reconstruction(Path(project_path))
             if not recon_result.get("ok"):
@@ -83,6 +88,7 @@ class _ReconWorker(QThread):
                 "obj_path": actual_obj,
                 "tiles": tiles,
                 "photos": photos,
+                "photo_poses": photo_poses,
             })
 
         except Exception as e:

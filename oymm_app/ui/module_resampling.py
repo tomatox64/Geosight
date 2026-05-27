@@ -65,6 +65,17 @@ class ResamplingPage(QWidget):
         self._report = ResamplingAnalyzer.analyze(photo_count, overlap_pct, width, height)
         self._display_report()
 
+    def load_poses(self, photo_poses: list[dict]):
+        """Re-analyze coverage using real AT photo positions."""
+        self.lbl_status.setText("基于真实位姿重新分析覆盖度...")
+        self.progress.setVisible(True)
+        self.btn_analyze.setEnabled(False)
+        self._report = ResamplingAnalyzer.analyze_from_poses(photo_poses)
+        self._display_report()
+        self.summary_text.setPlainText(
+            self._report.summary + f"\n(基于 {len(photo_poses)} 张照片的真实空三位姿)"
+        )
+
     def _setup_ui(self):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(10, 8, 10, 8)

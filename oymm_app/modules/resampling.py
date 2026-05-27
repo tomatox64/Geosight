@@ -70,10 +70,70 @@ class ResamplingAnalyzer:
         """Generate coverage analysis and gap suggestions.
 
         For demo purposes, simulates coverage grid with realistic patterns.
-        In production, this would use actual AT pose data.
+        In production, use analyze_from_poses() with actual AT pose data.
         """
         grid = cls._build_coverage_grid(photo_count, estimated_overlap_pct,
                                          width, height)
+        return cls._build_report(grid, photo_count)
+
+    @classmethod
+    def analyze_from_poses(cls, photo_poses: list[dict]) -> ResamplingReport:
+        """Compute real coverage from AT photo positions.
+
+        Each pose dict: {path, x, y, z} where (x,y,z) are world coordinates
+        from CC aerial triangulation.
+        """
+        if len(photo_poses) < 3:
+            # Fall back to simulated analysis
+            return cls.analyze(
+                photo_count=len(photo_poses) or 77,
+                estimated_overlap_pct=65.0,
+            )
+
+        pts = np.array([[p["x"], p["y"], p["z"]] for p in photo_poses])
+        x_min, x_max = pts[:, 0].min(), pts[:, 0].max()
+        y_min, y_max = pts[:, 1].min(), pts[:, 1].max()
+        z_mean = pts[:, 2].mean()
+
+        # Add margin
+        span_x = max(x_max - x_min, 1.0)
+        span_y = max(y_max - y_min, 1.0)
+        margin = 0.05
+        x_min -= span_x * margin
+        x_max += span_x * margin
+        y_min -= span_y * margin
+        y_max += span_y * margin
+
+        # Estimate ground footprint per photo
+        # Typical aerial camera: sensor ~13mm, focal ~24mm → FOV ~30°
+        # Footprint ≈ 2 * alt * tan(FOV/2)
+        fov_rad = np.radians(30)
+        footprint = 2.0 * z_mean * np.tan(fov_rad / 2)
+        # Each photo covers roughly footprint × footprint/(aspect) on ground
+        aspect = 1.5  # 3:2 typical
+
+        size = cls.GRID_SIZE
+        grid = np.zeros((size, size), dtype=np.float32)
+        for p in pts:
+            px = int((p[0] - x_min) / (x_max - x_min) * size)
+            py = int((p[1] - y_min) / (y_max - y_min) * size)
+            if not (0 <= px < size and 0 <= py < size):
+                continue
+
+            # Footprint in grid cells
+            fp_cells = int(footprint / (x_max - x_min) * size)
+            radius = max(1, int(fp_cells * 0.5))
+            y1, y2 = max(0, py - radius), min(size, py + radius + 1)
+            x1, x2 = max(0, px - radius), min(size, px + radius + 1)
+            yy, xx = np.ogrid[y1:y2, x1:x2]
+            dist = np.sqrt((xx - px) ** 2 + (yy - py) ** 2)
+            falloff = np.clip(1 - dist / max(radius, 1), 0, 1)
+            grid[y1:y2, x1:x2] = np.maximum(grid[y1:y2, x1:x2], falloff)
+
+        return cls._build_report(grid, len(photo_poses))
+
+    @classmethod
+    def _build_report(cls, grid: np.ndarray, photo_count: int) -> ResamplingReport:
         gap_mask = grid < 0.25  # <25% coverage = gap
 
         total_cells = grid.size

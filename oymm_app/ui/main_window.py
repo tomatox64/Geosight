@@ -226,6 +226,10 @@ class MainWindow(QMainWindow):
     def _on_recon_done(self, result):
         self._mark_completed(5)
         self.status_bar.showMessage(f"重建完成 — {result.get('tiles', '?')} 个瓦片")
+        # Feed real AT photo poses back to resampling module for re-analysis
+        photo_poses = result.get("photo_poses", [])
+        if photo_poses:
+            self.resampling_page.load_poses(photo_poses)
         self.export_page.load_data()
         self._advance(6)
 

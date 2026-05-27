@@ -113,6 +113,13 @@ class EngineBridge:
         })
 
     @staticmethod
+    def get_photo_poses(project_path: Path) -> dict:
+        """Get photo positions from AT results."""
+        return _call_worker("get_photo_poses", {
+            "project_path": str(project_path),
+        })
+
+    @staticmethod
     def run_production(
         project_path: Path,
         output_format: str = "OBJ",
