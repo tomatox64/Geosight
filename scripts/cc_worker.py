@@ -320,6 +320,40 @@ def cmd_get_photo_poses(args):
     }
 
 
+def cmd_get_tie_points(args):
+    """Extract tie point positions and colors from AT results."""
+    project_path = args.get("project_path")
+    if not project_path:
+        return {"ok": False, "error": "Missing project_path"}
+
+    project = ccmasterkernel.Project()
+    err = project.readFromFile(project_path)
+    if not err.isNone():
+        return {"ok": False, "error": f"Failed to load project: {err.message}"}
+
+    points = []
+    for bi in range(project.getNumBlocks()):
+        block = project.getBlock(bi)
+        n_tps = block.getNumTiePoints()
+        for ti in range(n_tps):
+            tp = block.getTiePoint(ti)
+            pos = tp.position
+            pts = {"x": pos.x, "y": pos.y, "z": pos.z}
+            if tp.color is not None:
+                pts["r"] = tp.color[0] if hasattr(tp.color, '__getitem__') else 0
+                pts["g"] = tp.color[1] if hasattr(tp.color, '__getitem__') else 0
+                pts["b"] = tp.color[2] if hasattr(tp.color, '__getitem__') else 0
+            else:
+                pts["r"] = pts["g"] = pts["b"] = 128
+            points.append(pts)
+
+    return {
+        "ok": True,
+        "count": len(points),
+        "points": points,
+    }
+
+
 COMMANDS = {
     "status": cmd_status,
     "create_project": cmd_create_project,
@@ -327,6 +361,7 @@ COMMANDS = {
     "run_reconstruct": cmd_run_reconstruct,
     "run_production": cmd_run_production,
     "get_photo_poses": cmd_get_photo_poses,
+    "get_tie_points": cmd_get_tie_points,
 }
 
 

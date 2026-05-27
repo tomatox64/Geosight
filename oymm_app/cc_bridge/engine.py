@@ -120,6 +120,13 @@ class EngineBridge:
         })
 
     @staticmethod
+    def get_tie_points(project_path: Path) -> dict:
+        """Get tie points (sparse point cloud) from AT results."""
+        return _call_worker("get_tie_points", {
+            "project_path": str(project_path),
+        })
+
+    @staticmethod
     def run_production(
         project_path: Path,
         output_format: str = "OBJ",

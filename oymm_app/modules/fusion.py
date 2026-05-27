@@ -21,12 +21,99 @@ class FusionEngine:
 
     @classmethod
     def fuse(cls, photo_count: int = 60,
-             calibration_score: float = 100) -> FusionResult:
-        """Generate a fused point cloud with RGB colors projected from imagery.
+             calibration_score: float = 100,
+             mesh_vertices: np.ndarray | None = None,
+             photo_poses: list[dict] | None = None,
+             photo_paths: list[str] | None = None) -> FusionResult:
+        """Fuse LiDAR geometry with RGB texture colors.
 
-        Simulates LiDAR geometry colored by aerial imagery, demonstrating
-        the multi-scale fusion concept of the system.
+        If mesh_vertices + photo_poses + photo_paths are provided, uses real
+        geometry from CC reconstruction and projects photo colors onto it.
+        Otherwise falls back to fully synthetic data.
         """
+        if (mesh_vertices is not None and len(mesh_vertices) > 0
+                and photo_poses and photo_paths):
+            return cls._fuse_from_real(mesh_vertices, photo_poses,
+                                       photo_paths, calibration_score)
+        return cls._fuse_synthetic(calibration_score)
+
+    @classmethod
+    def _fuse_from_real(cls, vertices: np.ndarray, poses: list[dict],
+                         paths: list[str], calib_score: float) -> FusionResult:
+        """Real fusion: mesh vertices as geometry, photo projection for colors."""
+        import cv2
+        from pathlib import Path
+
+        # Subsample vertices for manageable point cloud size
+        n_max = 20000
+        indices = np.arange(len(vertices))
+        if len(vertices) > n_max:
+            indices = np.random.RandomState(42).choice(len(vertices), n_max, replace=False)
+        geom = vertices[indices].astype(np.float64)
+        n_points = len(geom)
+
+        # Build photo position array
+        pose_arr = np.array([[p["x"], p["y"], p["z"]] for p in poses])
+        colors = np.zeros((n_points, 3), dtype=np.uint8)
+
+        # For each vertex, find nearest photo and sample color
+        # Simplified: use XY distance only (aerial nadir assumption)
+        for i, pt in enumerate(geom):
+            dists = np.sqrt((pose_arr[:, 0] - pt[0]) ** 2 + (pose_arr[:, 1] - pt[1]) ** 2)
+            nearest = int(np.argmin(dists))
+
+            # Load photo lazily (cache in dict)
+            if not hasattr(cls, '_photo_cache'):
+                cls._photo_cache = {}
+            if nearest not in cls._photo_cache:
+                img_path = paths[nearest] if nearest < len(paths) else paths[0]
+                img = cv2.imread(img_path)
+                if img is not None:
+                    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+                cls._photo_cache[nearest] = img
+            img = cls._photo_cache[nearest]
+
+            if img is not None:
+                # Approximate projection: use XY offset from photo center
+                dx = pt[0] - pose_arr[nearest, 0]
+                dy = pt[1] - pose_arr[nearest, 1]
+                # Simple perspective: ~2cm GSD at 80m altitude, scale to pixels
+                alt = max(pose_arr[nearest, 2], 1.0)
+                gsd = alt * 0.0003  # rough GSD m/pixel
+                h, w = img.shape[:2]
+                px = int(w / 2 + dx / gsd)
+                py = int(h / 2 - dy / gsd)
+                if 0 <= px < w and 0 <= py < h:
+                    colors[i] = img[py, px]
+                else:
+                    colors[i] = [128, 128, 128]
+            else:
+                colors[i] = [128, 128, 128]
+
+        cls._photo_cache = {}
+
+        xy_area = (geom[:, 0].max() - geom[:, 0].min()) * (geom[:, 1].max() - geom[:, 1].min())
+        density = n_points / max(xy_area, 1)
+        texture_coverage = float(np.sum(colors.sum(axis=1) > 10) / n_points)
+        color_consistency = float(1.0 - np.std(colors.astype(np.float32)) / 128)
+        score = min(100, round(texture_coverage * 40 + color_consistency * 30 + min(density / 20, 1) * 30, 1))
+
+        summary = (f"[真实数据] 融合完成：{n_points:,} 点，纹理覆盖率 {texture_coverage:.0%}，"
+                   f"密度 {density:.0f} pts/m²")
+
+        return FusionResult(
+            points=geom,
+            colors=colors,
+            point_count=n_points,
+            lidar_density=round(density, 1),
+            texture_coverage=round(texture_coverage, 4),
+            color_consistency=round(color_consistency, 4),
+            score=score,
+            summary=summary,
+        )
+
+    @classmethod
+    def _fuse_synthetic(cls, calibration_score: float) -> FusionResult:
         rng = np.random.RandomState(99)
         n_points = 15000
 

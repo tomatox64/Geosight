@@ -20,13 +20,22 @@ class _FusionWorker(QThread):
     finished = pyqtSignal(object)
     error = pyqtSignal(str)
 
-    def __init__(self, score: float):
+    def __init__(self, score: float, mesh_vertices=None,
+                 photo_poses=None, photo_paths=None):
         super().__init__()
         self.score = score
+        self.mesh_vertices = mesh_vertices
+        self.photo_poses = photo_poses
+        self.photo_paths = photo_paths
 
     def run(self):
         try:
-            result = FusionEngine.fuse(calibration_score=self.score)
+            result = FusionEngine.fuse(
+                calibration_score=self.score,
+                mesh_vertices=self.mesh_vertices,
+                photo_poses=self.photo_poses,
+                photo_paths=self.photo_paths,
+            )
             self.finished.emit(result)
         except Exception as e:
             self.error.emit(str(e))
@@ -72,12 +81,16 @@ class FusionPage(QWidget):
         self._result: FusionResult | None = None
         self._setup_ui()
 
-    def load_data(self, calibration_score: float = 100):
-        self.lbl_status.setText("融合计算中...")
+    def load_data(self, calibration_score: float = 100,
+                   mesh_vertices=None, photo_poses=None, photo_paths=None):
+        has_real = mesh_vertices is not None and len(mesh_vertices) > 0
+        source = "真实网格+照片投影" if has_real else "模拟"
+        self.lbl_status.setText(f"融合计算中 ({source})...")
         self.progress.setVisible(True)
         self.btn_run.setEnabled(False)
 
-        self._worker = _FusionWorker(calibration_score)
+        self._worker = _FusionWorker(
+            calibration_score, mesh_vertices, photo_poses, photo_paths)
         self._worker.finished.connect(self._on_done)
         self._worker.error.connect(self._on_error)
         self._worker.start()
@@ -214,7 +227,8 @@ class FusionPage(QWidget):
             f"点密度: {result.lidar_density:.1f} pts/m²\n"
             f"纹理覆盖率: {result.texture_coverage:.1%}\n"
             f"色彩一致性: {result.color_consistency:.1%}\n"
-            f"\n融合评分: {result.score:.0f}/100"
+            f"\n融合评分: {result.score:.0f}/100\n"
+            f"数据: {'真实网格投影' if '真实数据' in (result.summary or '') else '模拟数据'}"
         )
         self.plot.update_plot(result)
         self.lbl_status.setText(result.summary)

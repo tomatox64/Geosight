@@ -20,9 +20,13 @@ class _CalWorker(QThread):
     finished = pyqtSignal(object)
     error = pyqtSignal(str)
 
+    def __init__(self, tie_points: list[dict] | None = None):
+        super().__init__()
+        self.tie_points = tie_points
+
     def run(self):
         try:
-            report = CalibrationEngine.calibrate(60)
+            report = CalibrationEngine.calibrate(60, tie_points=self.tie_points)
             self.finished.emit(report)
         except Exception as e:
             self.error.emit(str(e))
@@ -90,12 +94,14 @@ class CalibrationPage(QWidget):
         self._report: CalibrationReport | None = None
         self._setup_ui()
 
-    def load_data(self):
-        self.lbl_status.setText("ICP 配准计算中...")
+    def load_data(self, tie_points: list[dict] | None = None):
+        self._tie_points = tie_points
+        source = "真实连接点" if tie_points else "模拟"
+        self.lbl_status.setText(f"ICP 配准计算中 ({source})...")
         self.progress.setVisible(True)
         self.btn_run.setEnabled(False)
 
-        self._worker = _CalWorker()
+        self._worker = _CalWorker(tie_points=tie_points)
         self._worker.finished.connect(self._on_done)
         self._worker.error.connect(self._on_error)
         self._worker.start()
@@ -226,7 +232,9 @@ class CalibrationPage(QWidget):
         self.cards["status"].setStyleSheet(f"font-size: 18pt; font-weight: bold; color: {c};")
 
         improvement = (a.rmse_before - a.rmse_after) / max(a.rmse_before, 0.001) * 100
+        data_source = "真实连接点 (CC AT)" if self._tie_points else "模拟数据"
         self.info_text.setText(
+            f"数据来源: {data_source}\n"
             f"平移向量: [{a.translation[0]:.3f}, {a.translation[1]:.3f}, {a.translation[2]:.3f}] m\n"
             f"误差改善: {improvement:.1f}%\n"
             f"收敛迭代: {a.iterations} 步\n"

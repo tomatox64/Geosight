@@ -57,6 +57,11 @@ class _ReconWorker(QThread):
             photo_poses = poses_result.get("poses", [])
             self.progress.emit(f"获取到 {len(photo_poses)} 个照片位姿")
 
+            self.progress.emit("提取连接点...")
+            tp_result = engine_bridge.get_tie_points(Path(project_path))
+            tie_points = tp_result.get("points", [])
+            self.progress.emit(f"获取到 {len(tie_points)} 个连接点")
+
             self.progress.emit("三维重建中...")
             recon_result = engine_bridge.run_reconstruction(Path(project_path))
             if not recon_result.get("ok"):
@@ -89,6 +94,7 @@ class _ReconWorker(QThread):
                 "tiles": tiles,
                 "photos": photos,
                 "photo_poses": photo_poses,
+                "tie_points": tie_points,
             })
 
         except Exception as e:

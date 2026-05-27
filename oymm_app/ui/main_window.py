@@ -226,10 +226,46 @@ class MainWindow(QMainWindow):
     def _on_recon_done(self, result):
         self._mark_completed(5)
         self.status_bar.showMessage(f"重建完成 — {result.get('tiles', '?')} 个瓦片")
-        # Feed real AT photo poses back to resampling module for re-analysis
+
         photo_poses = result.get("photo_poses", [])
+        tie_points = result.get("tie_points", [])
+        project_path = result.get("project_path", "")
+
+        # Feed real AT photo poses back to resampling module for re-analysis
         if photo_poses:
             self.resampling_page.load_poses(photo_poses)
+
+        # Feed real tie points to calibration module
+        if tie_points:
+            self.calibration_page.load_data(tie_points=tie_points)
+
+        # Feed real mesh + poses + photo paths to fusion module
+        if hasattr(self.recon_page, '_mesh') and self.recon_page._mesh is not None:
+            try:
+                import pyvista as pv
+                mesh = self.recon_page._mesh
+                verts = mesh.points if hasattr(mesh, 'points') else mesh.points
+                poses = photo_poses
+                # Collect photo paths from the project's photos
+                import os
+                photos_dir = os.path.join(
+                    os.path.dirname(project_path), "Photos")
+                if not os.path.isdir(photos_dir):
+                    photos_dir = "E:/oymm/data/photos/aukerman/images"
+                paths = sorted([
+                    os.path.join(photos_dir, f)
+                    for f in os.listdir(photos_dir)
+                    if f.lower().endswith(('.jpg', '.jpeg', '.png'))
+                ])
+                self.fusion_page.load_data(
+                    calibration_score=70,
+                    mesh_vertices=verts,
+                    photo_poses=poses,
+                    photo_paths=paths,
+                )
+            except Exception:
+                pass
+
         self.export_page.load_data()
         self._advance(6)
 
