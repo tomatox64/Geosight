@@ -1,4 +1,7 @@
 """模块6: 三维重建 - UI 页面."""
+import os
+import stat
+import time
 from pathlib import Path
 
 from PyQt6.QtWidgets import (
@@ -9,6 +12,33 @@ from PyQt6.QtWidgets import (
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 
 from oymm_app.cc_bridge.engine import engine_bridge
+
+
+def _rmtree_force(path: Path):
+    """Remove directory tree, handling Windows permission/lock issues."""
+    def _on_error(func, p, exc_info):
+        p = Path(p)
+        try:
+            p.chmod(stat.S_IWRITE)
+            func(p)
+        except Exception:
+            pass  # skip files that can't be deleted
+
+    for attempt in range(3):
+        try:
+            import shutil
+            shutil.rmtree(str(path), onerror=_on_error)
+            return
+        except Exception:
+            if attempt < 2:
+                time.sleep(1.5)
+            else:
+                # Last attempt: rename to temp name and ignore
+                try:
+                    tmp = str(path) + f".old_{int(time.time())}"
+                    os.rename(str(path), tmp)
+                except Exception:
+                    pass
 
 # Known OBJ output paths to auto-detect
 _KNOWN_OBJ_PATHS = [
@@ -29,12 +59,15 @@ class _ReconWorker(QThread):
         self.project_dir = project_dir
 
     def run(self):
-        import shutil
         try:
             name = "geosight_demo"
             proj_path = Path(self.project_dir)
+
+            # Robust cleanup: handle Windows file locks and read-only attributes
             if proj_path.exists():
-                shutil.rmtree(str(proj_path), ignore_errors=True)
+                engine_bridge.stop_engine()
+                time.sleep(1)
+                _rmtree_force(proj_path)
 
             self.progress.emit("创建工程...")
             result = engine_bridge.create_project(
@@ -396,9 +429,16 @@ class ReconstructionPage(QWidget):
     def _on_error(self, msg: str):
         self.progress.setVisible(False)
         self.btn_run.setEnabled(True)
-        self.lbl_status.setText("CC 管线未就绪，使用演示模型")
         self.log_text.append(f"CC: {msg}")
-        self._load_demo_mesh()
+
+        # Check if a previous OBJ exists before falling back to demo
+        existing = self._find_existing_obj()
+        if existing:
+            self.lbl_status.setText("CC 失败，加载已有模型")
+            self._load_mesh_from_file(existing)
+        else:
+            self.lbl_status.setText("CC 管线未就绪，使用演示模型")
+            self._load_demo_mesh()
 
     def _load_demo_mesh(self):
         import pyvista as pv
