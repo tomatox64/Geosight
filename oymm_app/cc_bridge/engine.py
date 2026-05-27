@@ -16,7 +16,8 @@ WORKER = Path("E:/oymm/scripts/cc_worker.py")
 ENGINE_BIN = Path("E:/Program/Bentley/ContextCapture/bin")
 
 
-def _call_worker(command: str, args: dict | None = None) -> dict[str, Any]:
+def _call_worker(command: str, args: dict | None = None,
+                  timeout: int = 600) -> dict[str, Any]:
     """Call the Python 3.6 worker and return parsed JSON result."""
     cmd = [str(PY36), str(WORKER), command]
     if args:
@@ -27,7 +28,7 @@ def _call_worker(command: str, args: dict | None = None) -> dict[str, Any]:
             cmd,
             capture_output=True,
             text=True,
-            timeout=600,
+            timeout=timeout,
             cwd=str(WORKER.parent),
         )
         if result.returncode != 0 and not result.stdout.strip():
@@ -99,11 +100,11 @@ class EngineBridge:
 
     @staticmethod
     def run_aerotriangulation(project_path: Path, density: str = "normal") -> dict:
-        """Run aerial triangulation."""
+        """Run aerial triangulation (up to 30 min timeout)."""
         return _call_worker("run_at", {
             "project_path": str(project_path),
             "keypoints_density": density,
-        })
+        }, timeout=1800)
 
     @staticmethod
     def run_reconstruction(project_path: Path) -> dict:
@@ -133,13 +134,13 @@ class EngineBridge:
         texture: bool = True,
         texture_quality: int = 80,
     ) -> dict:
-        """Submit production/export job."""
+        """Submit production/export job (up to 60 min timeout)."""
         return _call_worker("run_production", {
             "project_path": str(project_path),
             "format": output_format,
             "texture": texture,
             "texture_quality": texture_quality,
-        })
+        }, timeout=3600)
 
     def start_engine(self) -> bool:
         """Start engine process in background."""
