@@ -245,17 +245,29 @@ class ReconstructionPage(QWidget):
                 import pyvista as pv
                 mesh = pv.read(attempt_path)
                 self._mesh = mesh
+                # Check if mesh has materials from OBJ+MTL (implies texture)
+                has_tex = 'MaterialNames' in mesh.array_names
                 # Display in central viewport (modules 5/6/7 share the mesh)
                 if hasattr(self, '_viewport') and self._viewport is not None:
                     try:
                         for mid in (5, 6, 7):
                             self._viewport.set_module_actors(mid, [])
-                            self._viewport.add_mesh(
-                                mid, mesh, color="#e8dcc8",
-                                show_edges=False, smooth_shading=True,
-                                pbr=True, metallic=0.05, roughness=0.7,
-                                specular=0.3, ambient=0.2,
-                            )
+                            if has_tex:
+                                # Textured: let pyvista use the MTL texture
+                                self._viewport.add_mesh(
+                                    mid, mesh, show_edges=False,
+                                    smooth_shading=True, pbr=True,
+                                    metallic=0.0, roughness=0.6,
+                                    specular=0.1, ambient=0.3,
+                                )
+                            else:
+                                # Untextured demo: solid earthy color
+                                self._viewport.add_mesh(
+                                    mid, mesh, color="#e8dcc8",
+                                    show_edges=False, smooth_shading=True,
+                                    pbr=True, metallic=0.05, roughness=0.7,
+                                    specular=0.3, ambient=0.2,
+                                )
                             edges = mesh.extract_all_edges()
                             self._viewport.add_actor(mid, self._viewport.plotter.add_mesh(
                                 edges, color="#333333", opacity=0.15,
