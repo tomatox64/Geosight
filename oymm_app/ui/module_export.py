@@ -79,7 +79,12 @@ class ExportPage(QWidget):
             return
         r = ExportEngine.export(names)
         self._status_card.setText(f"已导出 — {r.total_size}")
-        QMessageBox.information(self, "导出完成", r.summary)
+        self._status_card.setStyleSheet(
+            "font-size:13pt;font-weight:bold;color:#3fb950;"
+            "background:rgba(255,255,255,0.03);border-radius:6px;padding:8px;"
+            "border:0.5px solid rgba(255,255,255,0.08);"
+        )
+        QMessageBox.information(self, "导出完成", f"{r.summary}\n\n文件已保存至:\n{r.output_dir}")
 
     def _on_confirm(self):
         self.data_ready.emit({"done": True})
