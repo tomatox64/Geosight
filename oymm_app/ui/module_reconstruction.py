@@ -100,8 +100,9 @@ class ReconstructionPage(QWidget):
         self._setup_ui()
 
     def load_data(self):
-        photos_dir = "E:/oymm/data/photos/test_scene"
-        project_dir = "E:/oymm/projects/geosight_demo"
+        # Available datasets: aukerman(77), seneca(167), quarry(347)
+        photos_dir = "E:/oymm/data/photos/aukerman/images"
+        project_dir = "E:/oymm/projects/aukerman_demo"
 
         self.lbl_status.setText("启动重建管线...")
         self.progress.setVisible(True)
